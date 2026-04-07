@@ -14,7 +14,7 @@
 | `02_semantic_view.sql` | Semantic view with inline synonyms — run after 01 |
 | `03_cortex_llm_functions.sql` | Segment 2 demo queries |
 | `04_cortex_search.sql` | Cortex Search service + demo queries |
-| `05_streamlit_app.py` | 3-tab Streamlit app: Sales Analyst / VoC / Multimodal |
+| `05_streamlit_app.py` | Unified AI chat: Cortex Analyst + Cortex Search with auto-routing |
 | `06_mcp_server.sql` | MCP server DDL + Copilot Studio config notes |
 
 ---
@@ -23,11 +23,10 @@
 
 - [ ] `01_setup.sql` run — verify store distribution query shows varied counts
 - [ ] `02_semantic_view.sql` run — validation queries return 5 rows
-- [ ] `05_streamlit_app.py` deployed and tested in Snowsight
 - [ ] `04_cortex_search.sql` run — `TRANSCRIPT_SEARCH STATE = ACTIVE`
+- [ ] `05_streamlit_app.py` deployed and tested in Snowsight
 - [ ] `06_mcp_server.sql` run — endpoint URL noted
 - [ ] Two browser windows open: Snowsight + Copilot Studio
-- [ ] Test image ready for Multimodal tab (product photo or receipt)
 
 ---
 
@@ -49,11 +48,11 @@ GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE <your_role>;
 |---|---------|-------|----------|-------|
 | 1 | Framing | 0:00 | 2 min | Whiteboard / slide |
 | 2 | Cortex LLM Functions | 2:00 | 4 min | `03_cortex_llm_functions.sql` |
-| 3 | Cortex Analyst — NL to SQL | 6:00 | 6 min | `05_streamlit_app.py` — Sales Analyst tab |
+| 3 | Cortex Analyst — NL to SQL | 6:00 | 6 min | `05_streamlit_app.py` — structured questions |
 | 4 | Cortex Search — RAG | 12:00 | 4 min | `04_cortex_search.sql` |
 | 5 | MCP Bridge — Copilot Studio | 16:00 | 5 min | `06_mcp_server.sql` + browser |
 | 6 | Snowflake Intelligence | 21:00 | 4 min | Snowsight → AI & ML → Intelligence |
-| 7 | Streamlit — VoC + Multimodal | 25:00 | 2 min | `05_streamlit_app.py` — tabs 2 & 3 |
+| 7 | Streamlit — unified chat demo | 25:00 | 2 min | `05_streamlit_app.py` — cross-backend questions |
 | 8 | Governance wrap | 27:00 | 3 min | Whiteboard |
 
 > ⚠️ **Kick off `04_cortex_search.sql` during Segment 3** — takes ~2 minutes to build. Must be ACTIVE before Segment 4.
@@ -67,7 +66,7 @@ GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE <your_role>;
 
 > Let me start with a question. If your data is already in Snowflake — governed, secured, current — what problem does moving it somewhere else actually solve?
 >
-> Today I'm going to show you that every AI capability you've been exploring — natural language queries, document intelligence, agentic workflows, even image analysis — runs natively inside Snowflake. Same RBAC. Same masking policies. No ETL, no copy, no new governance boundary.
+> Today I'm going to show you that every AI capability you've been exploring — natural language queries, document intelligence, agentic workflows — runs natively inside Snowflake. Same RBAC. Same masking policies. No ETL, no copy, no new governance boundary.
 >
 > And I'll show you something specific: if your users prefer Copilot Studio, Snowflake's managed MCP server connects them directly — live data, no import. So this isn't a binary choice.
 
@@ -114,15 +113,17 @@ A: Yes — Cortex Fine-Tuning trains a hosted base model on your Snowflake data.
 ---
 
 ### Segment 3 — Cortex Analyst (NL to SQL) `6:00 → 6 min`
-*Screen: Switch to Streamlit app tab — Sales Analyst tab open*
+*Screen: Switch to Streamlit app tab — ask a structured question*
 
 > ⚠️ **Now:** Switch to a second tab and run `CREATE CORTEX SEARCH SERVICE` in `04_cortex_search.sql`. Takes ~2 minutes to build. Must be ACTIVE before Segment 4.
 
-> This is the centrepiece for a business user audience. A Streamlit app — running inside Snowflake, no external hosting — that wraps Cortex Analyst. Type a question in plain English, get a chart.
+> This is the centrepiece for a business user audience. A Streamlit app — running inside Snowflake, no external hosting — wraps Cortex Analyst. Type a question in plain English, get a chart.
 >
 > The key is the semantic view we built in `02`. It maps business vocabulary to physical columns. 'Revenue' resolves to `NET_REVENUE`. 'Last quarter' generates the right `DATE_TRUNC`. Every metric has synonyms baked in.
+>
+> Notice the routing indicator — it shows which backend is being called before the result arrives. This question went to Cortex Analyst because it's about structured sales metrics.
 
-**Live demo questions**
+**Live demo questions — structured path**
 
 | Ask this | Point out |
 |---|---|
@@ -212,39 +213,38 @@ A: Public preview as of August 2025. Confirm it's enabled on your account before
 
 ---
 
-### Segment 7 — Streamlit: Voice of Customer + Multimodal `25:00 → 2 min`
-*Screen: `05_streamlit_app.py` → Voice of Customer tab, then Multimodal AI tab*
+### Segment 7 — Streamlit: unified chat demo `25:00 → 2 min`
+*Screen: `05_streamlit_app.py` — use the sidebar "Questions that use both" buttons*
 
-**Voice of Customer tab**
-
-> The second tab brings Segment 2's LLM functions into a polished UI. Four analyses: sentiment scoring with a donut chart, transcript summarisation with agent breakdowns, CLASSIFY_TEXT and EXTRACT_ANSWER on call types, and a negative feedback deep-dive. Each one shows the SQL expander so the audience can see exactly what ran.
-
-**Multimodal AI tab — the differentiator**
-
-> This is the capability that often surprises people. Upload any retail image — a product photo, a shelf tag, a receipt — and Cortex COMPLETE with a vision-capable model analyses it.
+> The Streamlit app is built to mirror what Intelligence does — one chat interface that routes to the right backend automatically. Structured questions go to Cortex Analyst and return SQL + a chart. Unstructured questions go to Cortex Search and return a synthesised answer grounded in the transcripts.
 >
-> Two modes: Product Identifier auto-prompts for category, price range, and retail fit. Free-form lets you ask anything — 'What promotional text is visible?', 'Is this label correct?'. The image and prompt never leave Snowflake's governance boundary. The SQL shape is shown in the expander so it's fully auditable.
+> The routing indicator shows which backend fired before the result arrives — that's the moment to call out for the audience.
 >
-> *[ Upload a product image — use 'Product Identifier' mode first, then switch to a free-form question ]*
+> *[ Ask a cross-backend question from the sidebar ]*
+>
+> "Which categories have low margin and what do call transcripts say about them?" — watch it query both. Cortex Analyst returns the margin chart, Cortex Search retrieves relevant transcripts, and COMPLETE synthesises a grounded response. Same question, two backends, one interface. This is the Intelligence pattern, built in Streamlit, running inside Snowflake.
 
-**Good demo images to prepare in advance:**
-- A product with visible branding and a price tag
-- A shelf photo with multiple products
-- A printed receipt or packing slip
-- A product label with ingredient/spec text
+**Live demo questions — cross-backend path**
 
-**Q: Which vision model is this?**  
-A: `claude-3-5-sonnet` by default — configurable at the top of the script. `pixtral-large` is also available. Both run inside Snowflake via Cortex COMPLETE.
+| Ask this | What happens |
+|---|---|
+| "Which categories have low margin and what do call transcripts say about them?" | Routes to both. Analyst returns chart. Search finds relevant complaints. COMPLETE synthesises. |
+| "Compare West region revenue and any related complaints" | Structured revenue chart + transcript excerpts side by side. |
 
-**Q: Can this work on documents as well as images?**  
-A: Yes — `PARSE_DOCUMENT` handles PDFs and returns structured text. For image-in-document scenarios you'd combine `PARSE_DOCUMENT` with `COMPLETE`.
+**Back-pocket Q&A**
+
+**Q: How does the routing work?**  
+A: Lightweight keyword classifier — no LLM call, no latency. Structured signals (revenue, margin, channel, etc.) go to Cortex Analyst. Unstructured signals (call, complaint, agent, feedback, etc.) go to Cortex Search. Both fire when a question contains both signal types.
+
+**Q: How is this different from Snowflake Intelligence?**  
+A: Same concept — agentic routing across structured and unstructured data. Intelligence is the fully managed version with a built-in UI. This Streamlit app shows the same pattern built with the underlying APIs, which is useful for demonstrating that it's composable and embeddable in any application.
 
 ---
 
 ### Segment 8 — Governance Wrap `27:00 → 3 min`
 *Screen: Whiteboard or summary slide — no new Snowsight tabs*
 
-> Every query today — the sentiment scoring, the NL to SQL chat, the document search, the Copilot Studio MCP call, the image analysis — every single one ran inside Snowflake's compute boundary. The RBAC on `VW_SALES_ENRICHED` controlled what Cortex Analyst could query. Masking policies apply whether you're in a SQL worksheet, the Streamlit app, or a Copilot Studio agent through MCP. You don't configure AI governance separately from data governance. They're the same thing.
+> Every query today — the sentiment scoring, the NL to SQL chat, the document search, the Copilot Studio MCP call, the unified chat routing — every single one ran inside Snowflake's compute boundary. The RBAC on `VW_SALES_ENRICHED` controlled what Cortex Analyst could query. Masking policies apply whether you're in a SQL worksheet, the Streamlit app, or a Copilot Studio agent through MCP. You don't configure AI governance separately from data governance. They're the same thing.
 >
 > Model choice is also inside the boundary. Mistral and Llama today. GPT-5.2 and Claude are also available inside Cortex. You're not sending data to external endpoints.
 >
@@ -261,36 +261,34 @@ A: Yes — `PARSE_DOCUMENT` handles PDFs and returns structured text. For image-
 | Snowflake | Microsoft equivalent |
 |---|---|
 | Cortex LLM Functions | Copilot in Fabric notebooks / Azure OpenAI |
-| Cortex Analyst (NL to SQL) | Power BI Q&A / Copilot in Power BI (portable YAML semantic layer) |
-| Cortex Search (RAG) | Copilot Studio knowledge base + Azure AI Search (no vector DB needed) |
+| Cortex Analyst (NL to SQL) | Power BI Q&A / Copilot in Power BI |
+| Cortex Search (RAG) | Copilot Studio knowledge base + Azure AI Search |
 | Managed MCP Server | Copilot Studio connector (RBAC passes through) |
 | Snowflake Intelligence | Copilot Studio agents / M365 Copilot |
-| Multimodal (COMPLETE + vision) | Azure AI Vision + OpenAI GPT-4V (all in SQL here) |
 | Snowflake RBAC + masking | Microsoft Purview (one governance boundary vs two) |
 
 ---
 
 ## Demo Question Bank
 
-**Sales Analyst tab (Streamlit)**
+**Structured questions → Cortex Analyst**
 - "What was total revenue by channel in Q4 2024?"
 - "Which product category has the highest margin?"
 - "Compare West and East region revenue by month in 2024"
 - "Which 3 stores had the lowest average order value?"
 - "How do Loyalty customers spend compared to New customers?"
 
-**Voice of Customer tab (Streamlit)**
-1. Feedback Sentiment Analysis — shows SENTIMENT + SUMMARIZE
-2. Summarize Call Transcripts — agent/type breakdown
-3. Classify & Extract — CLASSIFY_TEXT + EXTRACT_ANSWER
-4. Negative Feedback Deep-Dive — filtered sentiment
+**Unstructured questions → Cortex Search**
+- "Any complaints about product defects?"
+- "What compliments have customers given?"
+- "Any calls about the mobile app crashing?"
+- "What issues did agents escalate last quarter?"
 
-**Multimodal tab (Streamlit)**
-- "What product is this and what category does it belong to?"
-- "Identify any pricing or promotional information visible."
-- "Is this consistent with our product range?"
+**Cross-backend questions → both**
+- "Which categories have low margin and what do call transcripts say about them?"
+- "Compare West region revenue and any related complaints"
 
-**Cortex Search queries (`04_cortex_search.sql`)**
+**Cortex Search direct queries (`04_cortex_search.sql`)**
 - `"product defect damaged broken"`
 - `"excellent staff service compliment"`
 - `"app crash mobile checkout"`
@@ -303,7 +301,7 @@ A: Yes — `PARSE_DOCUMENT` handles PDFs and returns structured text. For image-
 |---|---|
 | "Cortex not available" | `SELECT SYSTEM$CORTEX_ENABLED_REGIONS();` — Cortex Analyst requires AWS us-east-1/us-west-2 or Azure East US / West Europe |
 | Streamlit "API error 401" | `GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE <role>;` |
-| Streamlit "Cortex Analyst API error 390400" | Role alternation error — clear conversation and retry. If persistent, check message history in session state. |
+| Streamlit "Cortex Analyst API error 390400" | Role alternation error — clear conversation and retry |
 | Cortex Search "service not found" | `SHOW CORTEX SEARCH SERVICES IN SCHEMA RETAIL_DEMO.MODELS;` — wait for `STATE = 'ACTIVE'` |
 | MCP server errors | Confirm tool names use hyphens not underscores. `DESCRIBE MCP SERVER RETAIL_DEMO.MODELS.RETAIL_MCP_SERVER;` |
 
@@ -320,4 +318,3 @@ A: Yes — `PARSE_DOCUMENT` handles PDFs and returns structured text. For image-
 | **Total pre-demo** | **~$5–8 USD** |
 
 > Set `AUTO_SUSPEND = 60` on `RETAIL_DEMO_WH` to avoid idle spend.
-
