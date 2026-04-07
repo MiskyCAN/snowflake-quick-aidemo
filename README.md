@@ -10,7 +10,6 @@
 
 | File | Purpose |
 |------|---------|
-| `00_readme.sql` | Full README embedded as SQL comments (source of this doc) |
 | `01_setup.sql` | All objects: warehouse, tables, data, view — run once |
 | `02_semantic_view.sql` | Semantic view with inline synonyms — run after 01 |
 | `03_cortex_llm_functions.sql` | Segment 2 demo queries |
