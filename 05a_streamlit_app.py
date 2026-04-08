@@ -19,7 +19,7 @@ import pandas as pd
 import altair as alt
 import requests
 import json
-from snowflake.snowpark.context import get_active_session
+from snowflake.snowpark import Session
 
 SEMANTIC_VIEW    = "RETAIL_DEMO.MODELS.RETAIL_SALES_SV"
 SEARCH_SERVICE   = "RETAIL_DEMO.MODELS.TRANSCRIPT_SEARCH"
@@ -89,7 +89,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-session = get_active_session()
+session = st.connection("snowflake").session()
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
