@@ -290,8 +290,10 @@ def render_message(msg: dict) -> None:
         if msg.get("sql") and st.session_state.show_sql:
             st.markdown('<span class="badge badge-gray">Generated SQL</span>', unsafe_allow_html=True)
             st.markdown(f'<div class="sql-box"><pre>{msg["sql"]}</pre></div>', unsafe_allow_html=True)
-        if msg.get("dataframe") is not None and not msg["dataframe"].empty:
-            auto_chart(msg["dataframe"])
+        if msg.get("dataframe") is not None:
+            _df = pd.DataFrame(msg["dataframe"])
+            if not _df.empty:
+                auto_chart(_df)
 
     if route in ("search", "both") and msg.get("search_answer"):
         st.markdown(
@@ -459,7 +461,7 @@ if user_input:
             "route":         route,
             "answer":        answer_text,
             "sql":           sql_text,
-            "dataframe":     df,
+            "dataframe":     df.to_dict("list") if df is not None else None,
             "search_hits":   search_hits,
             "search_answer": search_answer,
         })
