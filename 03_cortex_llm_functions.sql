@@ -10,10 +10,7 @@ USE DATABASE  RETAIL_DEMO;
 USE SCHEMA    RETAIL_DEMO.SALES;
 
 
--- CUSTOMER_FEEDBACK table and data are created in 01_setup.sql — no setup needed here.
-
-
--- ── B. DEMO STEP 1: Sentiment scoring ───────────────────────
+-- ── A. DEMO STEP 1: Sentiment scoring ───────────────────────
 -- Talk track: "One function call. No Python, no model deployment."
 -- Compare to: Azure OpenAI calls wrapped in Fabric notebook cells.
 
@@ -32,7 +29,7 @@ FROM CUSTOMER_FEEDBACK
 ORDER BY SENTIMENT_SCORE;
 
 
--- ── C. DEMO STEP 2: Summarize + extract root cause ──────────
+-- ── B. DEMO STEP 2: Summarize + extract root cause ──────────
 -- Talk track: "Now I want a one-line summary AND a structured
 --  insight — the kind of thing you'd build a Copilot plugin for."
 
@@ -55,7 +52,7 @@ FROM CUSTOMER_FEEDBACK
 ORDER BY SENTIMENT_SCORE;
 
 
--- ── D. BONUS: Aggregate — which channel has the worst sentiment? ─
+-- ── C. BONUS: Aggregate — which channel has the worst sentiment? ─
 -- Talk track: "This is where it gets interesting — AI output
 --  becomes a first-class column you can GROUP BY, filter, join."
 
@@ -75,7 +72,7 @@ FROM SCORED
 GROUP BY CHANNEL
 ORDER BY AVG_SENTIMENT;
 
--- ── E. GOVERNANCE reminder (for your wrap segment) ──────────
+-- ── D. GOVERNANCE reminder (for your wrap segment) ──────────
 -- The data never left Snowflake. The LLM call stays within the
 -- Snowflake governance boundary. RBAC on CUSTOMER_FEEDBACK
 -- controls who can even run these queries.

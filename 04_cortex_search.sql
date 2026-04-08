@@ -10,9 +10,6 @@ USE WAREHOUSE RETAIL_DEMO_WH;
 USE DATABASE  RETAIL_DEMO;
 USE SCHEMA    RETAIL_DEMO.SALES;
 
--- CALL_TRANSCRIPTS already exists from 01_setup.sql — no setup needed.
-
-
 -- ── A. Create Cortex Search service ─────────────────────────
 USE SCHEMA RETAIL_DEMO.MODELS;
 
