@@ -174,7 +174,7 @@ base AS (
     FROM dates d
     JOIN store_weights sw ON TRUE
     -- Generate exactly DAILY_TXN rows per store per day
-    JOIN TABLE(GENERATOR(ROWCOUNT => 6)) seq(n) ON seq.n <= sw.DAILY_TXN
+    JOIN (SELECT ROW_NUMBER() OVER (ORDER BY SEQ4()) AS n FROM TABLE(GENERATOR(ROWCOUNT => 6))) seq ON seq.n <= sw.DAILY_TXN
 ),
 priced AS (
     SELECT
