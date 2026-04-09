@@ -1,36 +1,23 @@
-# ============================================================
-# SNOWFLAKE AI DEMO — RETAIL SALES
-# File 05: Streamlit in Snowflake — unified AI chat
-#
-# One chat interface, two Cortex backends:
-#   • Cortex Analyst  — structured NL→SQL (sales data)
-#   • Cortex Search   — semantic search over call transcripts
-#
-# The app classifies each question and routes to the right
-# backend — or queries both when the question spans them.
-# This mirrors how Snowflake Intelligence works internally.
-#
-# Setup: Snowsight → Projects → Streamlit → + Streamlit App
-#        DB: RETAIL_DEMO | Schema: MODELS | WH: RETAIL_DEMO_WH
-# ============================================================
-
 import streamlit as st
 import pandas as pd
 import altair as alt
-import requests
 import json
-from snowflake.snowpark import Session
+import _snowflake
+from snowflake.snowpark.context import get_active_session
 
-SEMANTIC_VIEW    = "RETAIL_DEMO.MODELS.RETAIL_SALES_SV"
-SEARCH_SERVICE   = "RETAIL_DEMO.MODELS.TRANSCRIPT_SEARCH"
-MAX_CHART_ROWS   = 500
-CHART_PALETTE    = ["#29B5E8","#6366f1","#f59e0b","#10b981","#ef4444","#8b5cf6","#ec4899","#14b8a6"]
 
-# Keywords that suggest the question is about unstructured / call data
-SEARCH_KEYWORDS  = [
+SEMANTIC_VIEW = "RETAIL_DEMO.MODELS.RETAIL_SALES_SV"
+SEARCH_SERVICE = "TRANSCRIPT_SEARCH"
+SEARCH_DB = "RETAIL_DEMO"
+SEARCH_SCHEMA = "MODELS"
+MAX_CHART_ROWS = 500
+CHART_PALETTE = ["#29B5E8","#6366f1","#f59e0b","#10b981","#ef4444","#8b5cf6","#ec4899","#14b8a6"]
+
+SEARCH_KEYWORDS = [
     "call", "transcript", "complaint", "compliment", "feedback", "customer said",
     "agent", "ticket", "return", "refund", "issue", "support", "resolution",
     "what did", "who called", "any calls", "any feedback", "service experience",
+    "escalat", "defect", "crash", "mobile app", "shipping", "delivery",
 ]
 
 st.set_page_config(page_title="Retail Sales AI Assistant", layout="wide")
@@ -62,7 +49,7 @@ st.markdown("""
         font-size: 0.9rem; line-height: 1.6;
     }
     .search-result {
-        background: #fff; border-radius: 8px; padding: 0.75rem 1rem;
+        background: #1e1e2e; color: #cdd6f4; border-radius: 8px; padding: 0.75rem 1rem;
         border-left: 3px solid #6366f1; margin-bottom: 0.5rem;
         box-shadow: 0 1px 3px rgba(0,0,0,0.06); font-size: 0.85rem;
     }
@@ -89,49 +76,43 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-session = st.connection("snowflake").session()
-
+session = get_active_session()
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "show_sql" not in st.session_state:
-    st.session_state.show_sql = True
 
 
-# ── Routing classifier ────────────────────────────────────────
 def classify_question(question: str) -> str:
-    """
-    Returns 'search', 'analyst', or 'both'.
-    'both' triggers when a question clearly combines structured
-    metrics with unstructured context (e.g. margin + complaints).
-    """
     q = question.lower()
-    has_search  = any(kw in q for kw in SEARCH_KEYWORDS)
-    # Structured signals: numbers, metrics, comparisons, time periods
-    has_analyst = any(kw in q for kw in [
+    has_search = any(kw in q for kw in SEARCH_KEYWORDS)
+    analyst_keywords = [
         "revenue", "sales", "margin", "profit", "aov", "average order",
-        "channel", "region", "store", "product", "category", "quarter",
-        "month", "year", "trend", "compare", "top", "bottom", "highest",
-        "lowest", "how much", "how many", "total", "units sold",
-    ])
-    if has_search and has_analyst:
+        "channel", "category", "quarter", "month", "year", "trend",
+        "top", "bottom", "highest", "lowest", "how much", "how many",
+        "total", "units sold", "discount", "brand", "price",
+        "loyalty", "new customer", "standard",
+    ]
+    both_keywords = [
+        "revenue", "sales", "margin", "profit", "aov", "total",
+        "how much", "how many", "units sold", "discount", "price",
+    ]
+    has_analyst = any(kw in q for kw in analyst_keywords)
+    has_both = any(kw in q for kw in both_keywords)
+    if has_search and has_both:
         return "both"
     if has_search:
         return "search"
-    return "analyst"   # default to structured
+    if has_analyst:
+        return "analyst"
+    return "analyst"
 
 
-# ── Cortex Analyst ────────────────────────────────────────────
 def call_cortex_analyst(question: str, history: list) -> dict:
-    conn  = session.connection
-    token = conn.rest.token
-    url   = f"https://{conn.host}/api/v2/cortex/analyst/message"
-
     messages = []
     for msg in history[-6:]:
-        role = msg.get("role","")
+        role = msg.get("role", "")
         if role == "assistant":
             role = "analyst"
-        text = msg.get("content","") or ""
+        text = msg.get("content", "") or ""
         if not text.strip():
             continue
         if messages and messages[-1]["role"] == role:
@@ -142,54 +123,56 @@ def call_cortex_analyst(question: str, history: list) -> dict:
         messages.pop()
     messages.append({"role": "user", "content": [{"type": "text", "text": question}]})
 
-    response = requests.post(
-        url,
-        json={"messages": messages, "semantic_view": SEMANTIC_VIEW},
-        headers={"Authorization": f'Snowflake Token="{token}"',
-                 "Content-Type": "application/json", "Accept": "application/json"},
-        timeout=60
+    body = {"messages": messages, "semantic_view": SEMANTIC_VIEW}
+    resp = _snowflake.send_snow_api_request(
+        "POST",
+        "/api/v2/cortex/analyst/message",
+        {},
+        {},
+        body,
+        {},
+        30000,
     )
-    response.raise_for_status()
-    return response.json()
+    if resp["status"] < 400:
+        return json.loads(resp["content"])
+    raise RuntimeError(f"Cortex Analyst returned {resp['status']}: {resp['content']}")
 
 
-# ── Cortex Search ─────────────────────────────────────────────
-def call_cortex_search(question: str, limit: int = 3) -> list[dict]:
-    """Returns a list of matching transcript snippets."""
-    payload = json.dumps({
-        "query": question,
-        "columns": ["CALL_DATE", "CALL_TYPE", "AGENT_NAME", "STORE_ID", "BODY_TEXT"],
-        "limit": limit
-    })
-    raw = session.sql(f"""
+def call_cortex_search(question: str, limit: int = 10) -> list[dict]:
+    safe_q = question.replace("'", "''")
+    results = session.sql(f"""
         SELECT PARSE_JSON(
-            SNOWFLAKE.CORTEX.SEARCH_PREVIEW('{SEARCH_SERVICE}', $${payload}$$)
-        ) AS RESULTS
+            SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
+                '{SEARCH_DB}.{SEARCH_SCHEMA}.{SEARCH_SERVICE}',
+                '{{"query": "{safe_q}", "columns": ["BODY_TEXT","CALL_TYPE","AGENT_NAME","CALL_DATE"], "limit": {limit}}}'
+            )
+        )['results'] AS results
     """).collect()
-
-    if not raw:
-        return []
-    results_json = raw[0]["RESULTS"]
-    if results_json is None:
-        return []
-    results = json.loads(str(results_json))
-    return results.get("results", [])
+    if results and results[0]["RESULTS"]:
+        return json.loads(results[0]["RESULTS"])
+    return []
 
 
-# ── Synthesise search results with LLM ───────────────────────
 def synthesise_search(question: str, results: list[dict]) -> str:
-    """Use COMPLETE to generate a grounded answer from search hits."""
     if not results:
         return "No relevant call transcripts found."
-    excerpts = " | ".join([r.get("BODY_TEXT","")[:300] for r in results])
+    excerpts = []
+    for r in results:
+        text = r.get("BODY_TEXT", "")[:400]
+        call_type = r.get("CALL_TYPE", "")
+        excerpts.append(f"[{call_type}] {text}")
+    joined = " ||| ".join(excerpts)
+    escaped_q = question.replace("'", "''")
+    escaped_e = joined.replace("'", "''")
     sql = f"""
         SELECT SNOWFLAKE.CORTEX.COMPLETE(
-            'mistral-large',
-            CONCAT(
-                'You are a retail customer experience analyst. Answer this question: {question} ',
-                'Use only the following call transcript excerpts as your source. ',
-                'Be concise and factual. Excerpts: {excerpts}'
-            )
+            'mistral-large2',
+            'You are a retail customer experience analyst. '
+            || 'You found {len(results)} matching call transcripts. '
+            || 'Start your answer by stating how many were found (e.g. "X compliments were found" or "X complaints were found"). '
+            || 'Then summarize the key themes. Be specific and concise. '
+            || 'Question: {escaped_q} '
+            || 'Excerpts: {escaped_e}'
         ) AS ANSWER
     """
     try:
@@ -199,7 +182,6 @@ def synthesise_search(question: str, results: list[dict]) -> str:
         return "Unable to synthesise answer from transcripts."
 
 
-# ── SQL runner ────────────────────────────────────────────────
 def run_sql(sql: str) -> pd.DataFrame:
     sql = sql.strip().rstrip(";")
     if ";" in sql:
@@ -207,20 +189,19 @@ def run_sql(sql: str) -> pd.DataFrame:
     return session.sql(sql).limit(MAX_CHART_ROWS).to_pandas()
 
 
-# ── Auto-chart ────────────────────────────────────────────────
 def auto_chart(df: pd.DataFrame) -> None:
     if df.empty or len(df.columns) < 2:
-        st.dataframe(df, width="stretch")
+        st.dataframe(df, use_container_width=True)
         return
-    cols      = df.columns.tolist()
-    num_cols  = [c for c in cols if pd.api.types.is_numeric_dtype(df[c])]
-    cat_cols  = [c for c in cols if not pd.api.types.is_numeric_dtype(df[c])]
+    cols = df.columns.tolist()
+    num_cols = [c for c in cols if pd.api.types.is_numeric_dtype(df[c])]
+    cat_cols = [c for c in cols if not pd.api.types.is_numeric_dtype(df[c])]
     date_cols = [c for c in cat_cols if any(k in c.lower() for k in ["date","month","quarter","year"])]
     if not num_cols:
-        st.dataframe(df, width="stretch")
+        st.dataframe(df, use_container_width=True)
         return
     metric = num_cols[0]
-    scale  = alt.Scale(range=CHART_PALETTE)
+    scale = alt.Scale(range=CHART_PALETTE)
 
     if date_cols:
         x_col = date_cols[0]
@@ -249,7 +230,7 @@ def auto_chart(df: pd.DataFrame) -> None:
                 y=alt.Y(f"{metric}:Q", axis=alt.Axis(gridDash=[3,3])),
                 color=alt.value(CHART_PALETTE[0]), tooltip=cols
             ).properties(height=340).configure_view(strokeWidth=0)
-        st.altair_chart(chart, width="stretch")
+        st.altair_chart(chart, use_container_width=True)
         if len(df) <= 20 and cat_cols:
             mcols = st.columns(min(len(df), 4))
             for i, (_, row) in enumerate(df.head(4).iterrows()):
@@ -271,13 +252,12 @@ def auto_chart(df: pd.DataFrame) -> None:
         ).properties(height=max(220, len(df) * 36))
         text = bars.mark_text(align="left", dx=4, fontSize=11, fontWeight=600).encode(
             text=alt.Text(f"{metric}:Q", format=",.0f"), color=alt.value("#333"))
-        st.altair_chart((bars + text).configure_view(strokeWidth=0), width="stretch")
+        st.altair_chart((bars + text).configure_view(strokeWidth=0), use_container_width=True)
         return
 
-    st.dataframe(df, width="stretch")
+    st.dataframe(df, use_container_width=True)
 
 
-# ── Render a stored message ───────────────────────────────────
 def render_message(msg: dict) -> None:
     route = msg.get("route", "analyst")
 
@@ -301,46 +281,52 @@ def render_message(msg: dict) -> None:
             f'<span class="badge badge-purple">Cortex Search</span> call transcripts</div>',
             unsafe_allow_html=True)
         st.markdown(f'<div class="search-bubble">{msg["search_answer"]}</div>', unsafe_allow_html=True)
-        for hit in msg.get("search_hits", []):
-            body = hit.get("BODY_TEXT","")[:280]
-            call_type = hit.get("CALL_TYPE","")
-            agent     = hit.get("AGENT_NAME","")
-            call_date = hit.get("CALL_DATE","")
+        top_hits = msg.get("search_hits", [])[:3]
+        if top_hits:
+            st.markdown(f'<div class="route-indicator"><span class="badge badge-gray">Top {len(top_hits)} most relevant</span></div>', unsafe_allow_html=True)
+        for hit in top_hits:
+            body = hit.get("BODY_TEXT", "")[:200]
+            call_type = hit.get("CALL_TYPE", "")
+            agent = hit.get("AGENT_NAME", "")
+            call_date = hit.get("CALL_DATE", "")
             st.markdown(
                 f'<div class="search-result">'
                 f'<strong>{call_type}</strong> · {agent} · {call_date}<br>'
-                f'{body}{"…" if len(hit.get("BODY_TEXT","")) > 280 else ""}'
+                f'{body}{"…" if len(hit.get("BODY_TEXT", "")) > 200 else ""}'
                 f'</div>', unsafe_allow_html=True)
 
 
-# ── Sidebar ───────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("**Settings**")
-    st.session_state.show_sql = st.toggle("Show generated SQL", value=True)
+    if "show_sql" not in st.session_state:
+        st.session_state.show_sql = True
+    st.checkbox("Show generated SQL", key="show_sql")
 
     st.markdown("---")
     st.markdown("**Structured questions (Cortex Analyst):**")
     analyst_qs = [
         "Total revenue by channel in Q4 2024",
-        "Top 5 products by margin %",
+        "Top 5 products by gross margin",
         "West vs East revenue by month in 2024",
-        "Which stores had the most transactions?",
+        "Which stores had the most units sold?",
         "Loyalty vs New customer AOV in 2024",
     ]
     for q in analyst_qs:
-        if st.button(q, width="stretch", key=f"a_{q[:18]}"):
+        if st.button(q, key=f"a_{q[:20]}"):
             st.session_state.pending_question = q
+            st.rerun()
 
     st.markdown("**Unstructured questions (Cortex Search):**")
     search_qs = [
         "Any complaints about product defects?",
         "What compliments have customers given?",
-        "Any calls about the mobile app crashing?",
-        "What issues did agents escalate last quarter?",
+        "What issues did agents escalate?",
+        "Any calls about refunds or returns?",
     ]
     for q in search_qs:
-        if st.button(q, width="stretch", key=f"s_{q[:18]}"):
+        if st.button(q, key=f"s_{q[:20]}"):
             st.session_state.pending_question = q
+            st.rerun()
 
     st.markdown("**Questions that use both:**")
     both_qs = [
@@ -348,11 +334,12 @@ with st.sidebar:
         "Compare West region revenue and any related complaints",
     ]
     for q in both_qs:
-        if st.button(q, width="stretch", key=f"b_{q[:18]}"):
+        if st.button(q, key=f"b_{q[:20]}"):
             st.session_state.pending_question = q
+            st.rerun()
 
     st.markdown("---")
-    if st.button("Clear conversation", width="stretch"):
+    if st.button("Clear conversation"):
         st.session_state.messages = []
         st.rerun()
 
@@ -361,11 +348,10 @@ with st.sidebar:
         '<p style="font-size:0.75rem;color:#888;">'
         'Structured: RETAIL_DEMO.SALES<br>'
         'Unstructured: CALL_TRANSCRIPTS<br>'
-        'Stays inside Snowflake ✓</p>',
+        'Stays inside Snowflake</p>',
         unsafe_allow_html=True)
 
 
-# ── Chat history ──────────────────────────────────────────────
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         if msg["role"] == "user":
@@ -374,20 +360,19 @@ for msg in st.session_state.messages:
             render_message(msg)
 
 
-# ── Input ─────────────────────────────────────────────────────
 user_input = st.session_state.pop("pending_question", None) or \
              st.chat_input("Ask about sales data or call transcripts...")
 
 
-# ── Main logic ────────────────────────────────────────────────
 if user_input:
+    st.session_state.messages.append({"role": "user", "content": user_input})
+
     with st.chat_message("user"):
         st.write(user_input)
 
     with st.chat_message("assistant"):
         route = classify_question(user_input)
 
-        # Show routing indicator live so audience sees what's happening
         route_labels = {
             "analyst": '<span class="badge badge-blue">Cortex Analyst</span> routing to structured data',
             "search":  '<span class="badge badge-purple">Cortex Search</span> routing to call transcripts',
@@ -395,20 +380,19 @@ if user_input:
         }
         st.markdown(f'<div class="route-indicator">{route_labels[route]}</div>', unsafe_allow_html=True)
 
-        answer_text  = ""
-        sql_text     = ""
-        df           = None
-        search_hits  = []
-        search_answer= ""
+        answer_text = ""
+        sql_text = ""
+        df = None
+        search_hits = []
+        search_answer = ""
 
-        # ── Cortex Analyst path
         if route in ("analyst", "both"):
             with st.spinner("Querying structured data..."):
                 try:
                     result = call_cortex_analyst(user_input, st.session_state.messages)
                     blocks = result.get("message", {}).get("content", [])
-                    answer_text = next((b.get("text","") for b in blocks if b.get("type")=="text"), "")
-                    sql_text    = next((b.get("statement","") for b in blocks if b.get("type")=="sql"), "")
+                    answer_text = next((b.get("text", "") for b in blocks if b.get("type") == "text"), "")
+                    sql_text = next((b.get("statement", "") for b in blocks if b.get("type") == "sql"), "")
 
                     if answer_text:
                         st.markdown(f'<div class="answer-bubble">{answer_text}</div>', unsafe_allow_html=True)
@@ -421,12 +405,9 @@ if user_input:
                             auto_chart(df)
                         else:
                             st.info("Query returned no results.")
-                except requests.HTTPError as e:
-                    st.warning(f"Cortex Analyst: {e.response.text}")
                 except Exception as e:
                     st.warning(f"Cortex Analyst error: {str(e)}")
 
-        # ── Cortex Search path
         if route in ("search", "both"):
             with st.spinner("Searching call transcripts..."):
                 try:
@@ -438,31 +419,32 @@ if user_input:
                             f'<span class="badge badge-purple">Cortex Search</span> call transcripts</div>',
                             unsafe_allow_html=True)
                         st.markdown(f'<div class="search-bubble">{search_answer}</div>', unsafe_allow_html=True)
-                        for hit in search_hits:
-                            body      = hit.get("BODY_TEXT","")[:280]
-                            call_type = hit.get("CALL_TYPE","")
-                            agent     = hit.get("AGENT_NAME","")
-                            call_date = hit.get("CALL_DATE","")
+                        top_hits = search_hits[:3]
+                        if top_hits:
+                            st.markdown(f'<div class="route-indicator"><span class="badge badge-gray">Top {len(top_hits)} most relevant</span></div>', unsafe_allow_html=True)
+                        for hit in top_hits:
+                            body = hit.get("BODY_TEXT", "")[:200]
+                            call_type = hit.get("CALL_TYPE", "")
+                            agent = hit.get("AGENT_NAME", "")
+                            call_date = hit.get("CALL_DATE", "")
                             st.markdown(
                                 f'<div class="search-result">'
                                 f'<strong>{call_type}</strong> · {agent} · {call_date}<br>'
-                                f'{body}{"…" if len(hit.get("BODY_TEXT","")) > 280 else ""}'
+                                f'{body}{"…" if len(hit.get("BODY_TEXT", "")) > 200 else ""}'
                                 f'</div>', unsafe_allow_html=True)
                     else:
                         st.info("No matching transcripts found.")
                 except Exception as e:
                     st.warning(f"Cortex Search error: {str(e)}")
 
-        # Store in history
-        st.session_state.messages.append({"role": "user", "content": user_input})
         st.session_state.messages.append({
-            "role":          "assistant",
-            "content":       answer_text or sql_text or search_answer or "Here are the results.",
-            "route":         route,
-            "answer":        answer_text,
-            "sql":           sql_text,
-            "dataframe":     df.to_dict("list") if df is not None else None,
-            "search_hits":   search_hits,
+            "role": "assistant",
+            "content": answer_text or sql_text or search_answer or "Here are the results.",
+            "route": route,
+            "user_question": user_input,
+            "answer": answer_text,
+            "sql": sql_text,
+            "dataframe": df.to_dict("list") if df is not None else None,
+            "search_hits": search_hits,
             "search_answer": search_answer,
         })
-

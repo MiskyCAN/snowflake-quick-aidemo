@@ -14,8 +14,10 @@
 | `02_semantic_view.sql` | Semantic view with inline synonyms — run after 01 |
 | `03_cortex_llm_functions.sql` | Segment 2 demo queries |
 | `04_cortex_search.sql` | Cortex Search service + demo queries |
-| `05_streamlit_app.py` | Unified AI chat: Cortex Analyst + Cortex Search with auto-routing |
-| `06_mcp_server.sql` | MCP server DDL + Copilot Studio config notes |
+| `05_mcp_server.sql` | MCP server DDL + Copilot Studio config notes |
+| `streamlit_example/streamlit_app.py` | Unified AI chat: Cortex Analyst + Cortex Search with auto-routing |
+| `streamlit_example/streamlit_publish.sql` | Deploy the Streamlit app from workspace |
+| `streamlit_example/environment.yml` | Streamlit dependency pins |
 
 ---
 
@@ -24,8 +26,8 @@
 - [ ] `01_setup.sql` run — verify store distribution query shows varied counts
 - [ ] `02_semantic_view.sql` run — validation queries return 5 rows
 - [ ] `04_cortex_search.sql` run — `TRANSCRIPT_SEARCH STATE = ACTIVE`
-- [ ] `05_streamlit_app.py` deployed and tested in Snowsight
-- [ ] `06_mcp_server.sql` run — endpoint URL noted
+- [ ] `streamlit_example/streamlit_app.py` deployed and tested in Snowsight
+- [ ] `05_mcp_server.sql` run — endpoint URL noted
 - [ ] Two browser windows open: Snowsight + Copilot Studio
 
 ---
@@ -48,11 +50,11 @@ GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE <your_role>;
 |---|---------|-------|----------|-------|
 | 1 | Framing | 0:00 | 2 min | Whiteboard / slide |
 | 2 | Cortex LLM Functions | 2:00 | 4 min | `03_cortex_llm_functions.sql` |
-| 3 | Cortex Analyst — NL to SQL | 6:00 | 6 min | `05_streamlit_app.py` — structured questions |
+| 3 | Cortex Analyst — NL to SQL | 6:00 | 6 min | `streamlit_example/streamlit_app.py` — structured questions |
 | 4 | Cortex Search — RAG | 12:00 | 4 min | `04_cortex_search.sql` |
-| 5 | MCP Bridge — Copilot Studio | 16:00 | 5 min | `06_mcp_server.sql` + browser |
+| 5 | MCP Bridge — Copilot Studio | 16:00 | 5 min | `05_mcp_server.sql` + browser |
 | 6 | Snowflake Intelligence | 21:00 | 4 min | Snowsight → AI & ML → Intelligence |
-| 7 | Streamlit — unified chat demo | 25:00 | 2 min | `05_streamlit_app.py` — cross-backend questions |
+| 7 | Streamlit — unified chat demo | 25:00 | 2 min | `streamlit_example/streamlit_app.py` — cross-backend questions |
 | 8 | Governance wrap | 27:00 | 3 min | Whiteboard |
 
 > ⚠️ **Kick off `04_cortex_search.sql` during Segment 3** — takes ~2 minutes to build. Must be ACTIVE before Segment 4.
@@ -174,13 +176,13 @@ A: PDFs via `PARSE_DOCUMENT`, plain text, any VARCHAR in a Snowflake table. Demo
 ---
 
 ### Segment 5 — MCP Bridge (Snowflake → Copilot Studio) `16:00 → 5 min`
-*Screen: Split — Snowsight left (`06_mcp_server.sql`) | Copilot Studio browser right*
+*Screen: Split — Snowsight left (`05_mcp_server.sql`) | Copilot Studio browser right*
 
 > Nothing I've shown requires your users to give up Copilot Studio. Snowflake's managed MCP server — GA since November — connects Copilot Studio agents directly to Snowflake as a backend. Data never moves. RBAC on the semantic view controls what the agent can see.
 >
 > The architecture decision isn't Snowflake or Copilot Studio. It's: where should the AI compute run, and where should the data live?
 >
-> *[ Show `06_mcp_server.sql` — one CREATE MCP SERVER statement with FROM SPECIFICATION block ]*
+> *[ Show `05_mcp_server.sql` — one CREATE MCP SERVER statement with FROM SPECIFICATION block ]*
 >
 > One SQL statement. The YAML block registers both tools: Cortex Analyst against the semantic view, and Cortex Search against the transcript service. Copilot Studio auto-discovers them from the endpoint.
 >
@@ -214,7 +216,7 @@ A: Public preview as of August 2025. Confirm it's enabled on your account before
 ---
 
 ### Segment 7 — Streamlit: unified chat demo `25:00 → 2 min`
-*Screen: `05_streamlit_app.py` — use the sidebar "Questions that use both" buttons*
+*Screen: `streamlit_example/streamlit_app.py` — use the sidebar "Questions that use both" buttons*
 
 > The Streamlit app is built to mirror what Intelligence does — one chat interface that routes to the right backend automatically. Structured questions go to Cortex Analyst and return SQL + a chart. Unstructured questions go to Cortex Search and return a synthesised answer grounded in the transcripts.
 >

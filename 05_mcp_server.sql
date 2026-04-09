@@ -1,6 +1,6 @@
 -- ============================================================
 -- SNOWFLAKE AI DEMO — RETAIL SALES
--- File 06: MCP Server setup (Segment 5 — 5 minutes)
+-- File 05: MCP Server setup (Segment 5 — 5 minutes)
 -- "Your Copilot Studio agent can already talk to this data.
 --  No import, no ETL, same RBAC it's always had."
 -- ============================================================
